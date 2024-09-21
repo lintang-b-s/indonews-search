@@ -1,0 +1,6 @@
+nltk==3.9.1
+numpy==2.1.1
+PySastrawi==1.2.0
+pandas 
+flask
+flask_script

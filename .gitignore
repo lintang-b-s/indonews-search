@@ -1,0 +1,8 @@
+.vscode
+fts/__pycache__/
+output_dir/
+venv/
+__pycache__/
+News.csv
+
+.ipynb_checkpoints/
