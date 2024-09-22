@@ -205,7 +205,7 @@ class DynamicBSBIIndexer:
       print("closing database... and writing in-memory inverted indexes to disk")
       for i in range(0, sys.maxsize ):
           curr_index_name = "DynamicBSBI_Lintang_" + str(i)
-          if i not in self.indexes:
+          if i not in self.indexes and len(self.in_memory_indices) != 0:
               # write in_memory inverted index ke disk
               index_i = self.in_memory_indices
               self.indexes.add(int(i))
