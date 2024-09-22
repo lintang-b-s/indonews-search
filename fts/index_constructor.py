@@ -7,6 +7,8 @@ import nltk
 from fts.mapper import IdMap
 from fts.parser import *
 from fts.index import *
+from collections import OrderedDict
+
 import sys
 import re
 
@@ -21,9 +23,9 @@ stemmer = factory.create_stemmer()
 stop_words = set(nltk.corpus.stopwords.words('indonesian'))
 
 
-class DynamicBSBIIndexer:
+class DynamicSIPMI_BSBIIndexer:
   """Blocked sort-based Indexing & Dynamic Indexing & tf idf &  pembuatan inverted index
-  BSBI:
+  SIPMI_BSBI:
   1. mensegmentasi seluruh dokumen di dalam csv menjadi 11 block/bagian.
   2. sorting pasangan termID-pairID setiap block berdasarkan termID lalu sort berdasarkan pairID dan buat posting lists .
   3. menyimpan sorted posting lists ke index file di disk.
@@ -53,11 +55,11 @@ class DynamicBSBIIndexer:
     auxilary inverted index di dalam memory, setiap doc baru diindex ke database, indexnya diinsert disini.
     setelah ukuran postings_list in_memory_indices > 1e8, merge dengan inverted index di indices 
   indices: set
-    list of inverted index file selain BSBI_Lintang_main (di dalam disk)
+    list of inverted index file selain SIPMI_BSBI_Lintang_main (di dalam disk)
   max_dynamic_posting_list_size: int
     ukuran maksimal jumlah posting list  di in_memory_indices
   """
-  def __init__(self, file_path, output_dir, index_name = "BSBI_Lintang_main", inverted_index_buffer_size = 1e8
+  def __init__(self, file_path, output_dir, index_name = "SIPMI_BSBI_Lintang_main", inverted_index_buffer_size = 1e8
                  ):
     self.term_id_map = IdMap()
     self.doc_id_map = IdMap()
@@ -76,7 +78,7 @@ class DynamicBSBIIndexer:
       
 
   def initialization(self):
-    dynamic_index_filename = "DynamicBSBI_Lintang_"
+    dynamic_index_filename = "DynamicSIPMI_BSBI_Lintang_"
     print("initializing: meload data dari database file...")
     for (_, _, filenames) in os.walk("./output_dir"):
         if len(filenames) != 0:
@@ -87,7 +89,7 @@ class DynamicBSBIIndexer:
                 i = re.findall(r'\d+', filename)
                 i = i[0]
                 self.indexes.add(int(i))
-                index_file = "DynamicBSBI_Lintang_" + str(i)
+                index_file = "DynamicSIPMI_BSBI_Lintang_" + str(i)
                 with InvertedIndex(index_file, self.output_dir) as curr_idx:
                     for docID, termCount in curr_idx.doc_term_count_dict.items():
                         self.docWordCount[docID] = termCount
@@ -122,7 +124,7 @@ class DynamicBSBIIndexer:
       Z: dict{term: postings_list}
       token_index: InvertedIndexIterator
       """
-      # index/in_memory_indices/token_posting_list =  token -> docID, docID, docID
+      
       for token, postings_list in heapq.merge(curr_index):
          # https://eecs485staff.github.io/p4-mapreduce/heapq.html
          if token in Z:
@@ -156,6 +158,7 @@ class DynamicBSBIIndexer:
       term_doc_dict =  defaultdict(list)
       for t,d in term_doc_pairs:
         term_doc_dict[t].append(d)
+
       for t in sorted(term_doc_dict.keys()):
         unsorted_posting_list = term_doc_dict[t]
 
@@ -188,8 +191,9 @@ class DynamicBSBIIndexer:
         """
         doc_term_counter = dict()
         for token in sorted(indices.keys()):
-          sorted_postings_list = indices[token]
+          sorted_postings_list = sorted(indices[token])
           index_writer.append(token, sorted_postings_list)
+
           for doc_id in sorted_postings_list:
               if doc_id not in doc_term_counter:
                 doc_term_counter[doc_id] = 1
@@ -204,7 +208,7 @@ class DynamicBSBIIndexer:
   def close(self):
       print("closing database... and writing in-memory inverted indexes to disk")
       for i in range(0, sys.maxsize ):
-          curr_index_name = "DynamicBSBI_Lintang_" + str(i)
+          curr_index_name = "DynamicSIPMI_BSBI_Lintang_" + str(i)
           if i not in self.indexes :
               # write in_memory inverted index ke disk
               # write index_i ke disk
@@ -213,6 +217,20 @@ class DynamicBSBIIndexer:
                 self.indexes.add(int(i))
                 index_writer = InvertedIndex(curr_index_name, directory=self.output_dir).open_writer()
                 self.write_indices_to_disk(index_i, index_writer)
+                index_writer.exit()
+              break
+          elif  os.path.getsize('./output_dir/{}.index'.format(curr_index_name))/1e6 < 400:
+              if len(self.in_memory_indices) != 0:
+                
+                index_i  = InvertedIndexIterator(curr_index_name,
+                                        directory=self.output_dir).enter() # open index_i file
+              
+                Zi = self.merge_index(self.in_memory_indices, index_i) # merge inverted index index_i dengan inverted index Zi
+                index_i.exit()
+
+                index_writer = InvertedIndex(curr_index_name, directory=self.output_dir).open_writer()
+                self.write_indices_to_disk(Zi, index_writer)
+                
                 index_writer.exit()
               break
             
@@ -233,9 +251,9 @@ class DynamicBSBIIndexer:
       self.total_doc_num += 1
       if in_memory_indices_size >= self.max_dynamic_posting_list_size:
         index_i = None
-        Zi = self.in_memory_indices
+        Zi = OrderedDict(sorted(self.in_memory_indices.items()))
         for i in range(0, sys.maxsize ):
-          curr_index_name = "DynamicBSBI_Lintang_" + str(i)
+          curr_index_name = "DynamicSIPMI_BSBI_Lintang_" + str(i)
           if i in self.indexes:
               
               index_i  = InvertedIndexIterator(curr_index_name,
@@ -278,6 +296,125 @@ class DynamicBSBIIndexer:
      self.intermediate_indices.append(index_id)
      index.exit()
      print("berhasil mengideks batch data ke-", i)
+
+  
+  def sipmi_parse_block(self, doc, title):
+      """
+        Parse satu block yang berisi list of documents dari csv menjadi termID-docID pairs
+    
+        Params
+        ------
+        doc: string
+            content dokumen
+        title: string
+            title dokumen
+        Returns
+        ------
+        List[tuple[Int, Int]]
+            list semua termID, docID pairs
+        
+      """
+      if type(doc) == float:
+          return []
+      term_doc_pairs = []
+      doc_id = self.doc_id_map[title]
+      doc = stemmer.stem(doc) # stemming
+      words = nltk.word_tokenize(doc) # tokenisasi
+      self.docWordCount[doc_id] = len(words) # simpan word count dokumen untuk hitung tf
+            
+      for word in words:
+            word = word.lower()  # mengubah kata ke lowercase
+            if word not in stop_words: # stopword removal
+              term_id = self.term_id_map[word] # harusnya tidak perlu simpan term->termID kalau SIPMI, create separate dictionary utk setiap block index
+              term_doc_pairs.append([term_id, doc_id])
+      return term_doc_pairs
+
+  def sipmi_invert(self, df):
+      """
+      indexing pakai single-pass in-memory indexing
+      https://nlp.stanford.edu/IR-book/pdf/04const.pdf
+      
+
+      """
+      dictionary=  dict()
+      posting_size = 0
+      block = 0
+      
+      for ind in df.index:
+        
+        term_doc_pairs = self.sipmi_parse_block(df["content"][ind], data["title"][ind])
+        if len(term_doc_pairs) == 0:
+            continue
+        for term, doc_id in term_doc_pairs:
+            postings_list = None
+            if term not in dictionary:
+                postings_list = []
+                dictionary[term] = postings_list
+            else:
+                postings_list = dictionary[term]
+            postings_list.append(doc_id)
+            dictionary[term] = postings_list
+            posting_size += 1
+
+        if posting_size >= 10e5:
+            posting_size = 0
+            sorted_terms = sorted(list(dictionary.keys()))
+            index_id = 'index_'+str(block) # membuat inverted index setiap block
+            print("menyimpan ", index_id, " ke disk")
+            index = InvertedIndex(index_id, directory=self.output_dir).open_writer()
+            self.intermediate_indices.append(index_id)
+            for t in sorted_terms:
+                sorted_posting_list = sorted(dictionary[t])
+                index.append(t, sorted_posting_list)
+            block +=1
+            dictionary=  dict()
+            index.exit()
+            
+      # last block index
+      sorted_terms = sorted(list(dictionary.keys()))
+      index_id = 'index_'+str(block) # membuat inverted index setiap block
+      print("menyimpan ", index_id, " ke disk")
+      index = InvertedIndex(index_id, directory=self.output_dir).open_writer()
+      self.intermediate_indices.append(index_id)
+      for t in sorted_terms:
+        sorted_posting_list = sorted(dictionary[t])
+        index.append(t, sorted_posting_list)
+      block +=1
+      index.exit()
+        
+
+
+
+  def sipmi_index(self):
+      start = time.time()
+      df =  pd.read_csv(self.file_path)
+      self.sipmi_invert(df)
+
+      self.save()
+      merged_index  = InvertedIndex(self.index_name, directory=self.output_dir ).open_writer() 
+          # membuka file index_name dan merge semua block inverted index ke merged_index
+          # write merged_index ke file index_name
+      indices = []
+      try:
+          for index_id in self.intermediate_indices:
+              
+                curr_idx = InvertedIndexIterator(index_id,
+                                        directory=self.output_dir).enter()
+                indices.append(curr_idx)
+          self.merge(indices, merged_index)
+      except Exception as e:
+          print(f"An error occurred: {e}")
+      finally:
+        for indices in indices:
+            indices.exit()      
+        
+      merged_index.exit()
+
+      end = time.time()
+      print(f"total waktu yang dibutuhkan untuk indexing seluruh dokumen: {(end-start)*10**3:.03f}ms")
+
+      
+    
 
   def index(self):
       """
@@ -375,7 +512,6 @@ class DynamicBSBIIndexer:
         doc = block["content"][ind]
         if type(doc) != str:
           continue
-        processed_word_in_doc = []
         doc_id = self.doc_id_map[block["title"][ind]]
         doc = stemmer.stem(doc) # stemming
         words = nltk.word_tokenize(doc) # tokenisasi
@@ -427,15 +563,15 @@ class DynamicBSBIIndexer:
             self.total_doc_num = len(docs)
             self.idf = {}
             
-            metadata_file_path = os.path.join("output_dir", "BSBI_Lintang_main"+'.dict')
+            metadata_file_path = os.path.join("output_dir", "SIPMI_BSBI_Lintang_main"+'.dict')
             with open(metadata_file_path, 'rb') as f:
                 postings_dict, terms, doc_term_count_dict = pkl.load(f)
 
-            index_file_path = os.path.join("output_dir", "BSBI_Lintang_main"+'.index')
+            index_file_path = os.path.join("output_dir", "SIPMI_BSBI_Lintang_main"+'.index')
             index_file = open(index_file_path, 'rb+')
             self.df = {}
 
-            # hitung df untuk setiap term di inverted index BSBI_Lintang_main
+            # hitung df untuk setiap term di inverted index SIPMI_BSBI_Lintang_main
             for t_id, (start_position, _, length_in_bytes) in postings_dict.items():
                 index_file.seek(start_position)
                 postings_list = decode_postings_list(index_file.read(length_in_bytes))
@@ -453,7 +589,7 @@ class DynamicBSBIIndexer:
             
             # menghitung df untuk setiap term di setiap inverted index (yang didalam disk) di self.indexes
             for inverted_index in self.indexes:
-                with InvertedIndex("DynamicBSBI_Lintang_"+str(inverted_index), directory=self.output_dir
+                with InvertedIndex("DynamicSIPMI_BSBI_Lintang_"+str(inverted_index), directory=self.output_dir
                     ) as curr_index:
                         for t_id, (start_position, _, length_in_bytes) in curr_index.postings_dict.items():
                             curr_index.index_file.seek(start_position)
@@ -531,7 +667,7 @@ class DynamicBSBIIndexer:
 
             # menghitung tf untuk setiap on-disk inverted index di self.indices
             for inverted_index in self.indexes:
-                with InvertedIndex("DynamicBSBI_Lintang_"+str(inverted_index), directory=self.output_dir
+                with InvertedIndex("DynamicSIPMI_BSBI_Lintang_"+str(inverted_index), directory=self.output_dir
                     ) as curr_index:
                         for term in terms:
                             term_id = self.term_id_map.str_to_id.get(term.lower())
@@ -566,5 +702,6 @@ class DynamicBSBIIndexer:
                 sortedRes[docID] = self.doc_id_map[docID]
         res = [(key, value) for key, value in sortedRes.items()]
         return res
+  
   
   

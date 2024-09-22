@@ -1,4 +1,4 @@
-import array
+import vbcode
 
 
 def encode_postings_list(posting_lists):
@@ -14,7 +14,7 @@ def encode_postings_list(posting_lists):
     bytes
         bytearray berisi integer docIds di dalam posting_list
     """
-    return array.array('L', posting_lists).tobytes()
+    return vbcode.encode(posting_lists)
 
 def decode_postings_list(encoded_postings_list):
     """decode posting lists dari stream of bytes
@@ -30,6 +30,4 @@ def decode_postings_list(encoded_postings_list):
     List[int]
         posting_lists yang sudah didecode/list of docIDs
     """
-    decoded_postings_list = array.array('L')
-    decoded_postings_list.frombytes(encoded_postings_list)
-    return decoded_postings_list.tolist()
+    return vbcode.decode(encoded_postings_list)

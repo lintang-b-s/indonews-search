@@ -8,7 +8,7 @@ if os.path.exists("./News.csv") == False:
         path = "News.csv"
         urllib.request.urlretrieve(url, path)
         print("selesai mendownload file News.csv")
-from fts.index_constructor import DynamicBSBIIndexer
+from fts.index_constructor import DynamicSIPMI_BSBIIndexer
 
 from flask import Flask, request, jsonify
 
@@ -19,12 +19,15 @@ if os.path.exists("./output_dir") == False:
 
 
 with app.app_context():
-    global BSBI_instance
-    BSBI_instance = DynamicBSBIIndexer(file_path= "./News.csv", output_dir = 'output_dir',inverted_index_buffer_size=1e8)
+    global SIPMI_BSBI_instance
+    SIPMI_BSBI_instance = DynamicSIPMI_BSBIIndexer(file_path= "./News.csv", output_dir = 'output_dir',inverted_index_buffer_size=1e8)
     for (_, _, filenames) in os.walk("./output_dir"):
          if len(filenames) == 0:
-             BSBI_instance.index()
-    BSBI_instance.build_idf()
+            # choose one
+            # SIPMI_BSBI_instance.index()
+            SIPMI_BSBI_instance.sipmi_index() 
+    SIPMI_BSBI_instance.build_idf()
+
 
 
 
@@ -35,7 +38,7 @@ def query():
     if request.method == 'GET':
         req_data = request.get_json()
         query = req_data['query']
-        results = BSBI_instance.compute_tf_idf(query=query)
+        results = SIPMI_BSBI_instance.compute_tf_idf(query=query)
         return jsonify({
                     'res': results,
                     'status': '200',
@@ -48,7 +51,7 @@ def index_doc():
           req_data = request.get_json()
           title = req_data['title']
           content = req_data['content']
-          BSBI_instance.lMergeAddToken(content, title)
+          SIPMI_BSBI_instance.lMergeAddToken(content, title)
           return jsonify({
                     'status': '200',
                     'msg': 'Success indexing this news'
@@ -56,7 +59,7 @@ def index_doc():
 
 
 def on_shutdown():
-    BSBI_instance.close() # save auxilary in-memory inverted index (dynamic indexing) ke disk
+    SIPMI_BSBI_instance.close() # save auxilary in-memory inverted index (dynamic indexing) ke disk
 
 
 atexit.register(on_shutdown)

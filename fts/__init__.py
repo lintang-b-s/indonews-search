@@ -1,1 +1,1 @@
-__all__ = ["bsbi", "index", "mapper", "utils"]
+__all__ = ["SIPMI_BSBI", "index", "mapper", "utils"]

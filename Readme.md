@@ -47,7 +47,6 @@ curl --location 'http://localhost:5000/index' \
 --data '{
     "title": "10 Hal Seru yang Dilakukan IShowSpeed di Yogyakarta, Jadi Mas-mas Jawa hingga Cicipi Beras Kencur",
     "content": "Ada banyak hal seru yang dilakukan IShowSpeed saat berkunjung ke Yogyakarta, Jawa Tengah pada Sabtu, 21 September 2024. Perjalanannya ini terekam dalam kanal YouTube pribadinya, IShowSpeed. IShowSpeed menikmati berbagai pengalaman khas lokal yang penuh keakraban dengan budaya Jawa dan kearifan Yogyakarta . Dengan gayanya yang khas, Youtuber asal Amerika ini pun berhasil mencuri perhatian netizen Indonesia. Bahkan, videonya saat berada di Yogyakarta sudah ditonton lebih dari 7,5 juta kali. Pria yang dipanggil El Kecepatan ini sebelumnya lebih dahulu mengunjungi Malaysia, kemudian menyambangi Jakarta, serta Bali dengan ditemani Reza Arap. Berikut adalah sederet keseruan IShowSpeed saat berkunjung ke Yogyakarta dikutip dari akun YouTube pribadinya, Minggu (22/9/2024). Saat sampai di Teras Malioboro, Speed langsung disambut oleh tiga orang yang berdandan ala tukang jamu gendong. Mereka kemudian memakaikan sang Youtuber baju batik dan blangkon, hingga menawarkannya untuk mencoba salah satu oleh-oleh khas Yogyakarta, yakni bakpia. Setelah dibuat kebingungan saat memakai batik dan menjajal bakpia, Speed lalu berjalan menghampiri sejumlah pemain gendang yang tampak kompak mengenakan batik. Ia mencoba ikut bermain gendang bersama mereka. Menariknya, di tengah-tengah aksinya itu, ia berkata, Kita harus memulai membuat band Indonesia"
-
 }'
 ```
 
