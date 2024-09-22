@@ -159,8 +159,8 @@ class DynamicBSBIIndexer:
         self.update_idf(t, len(sorted_posting_list))
 
         if t in self.in_memory_indices:
-
-            self.in_memory_indices[t].append(sorted_posting_list)
+            for posting in sorted_posting_list:
+                self.in_memory_indices[t].append(posting)
             self.in_memory_indices[t] = sorted(self.in_memory_indices[t])
         else:
             self.in_memory_indices[t] = sorted_posting_list
