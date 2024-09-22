@@ -205,15 +205,15 @@ class DynamicBSBIIndexer:
       print("closing database... and writing in-memory inverted indexes to disk")
       for i in range(0, sys.maxsize ):
           curr_index_name = "DynamicBSBI_Lintang_" + str(i)
-          if i not in self.indexes and len(self.in_memory_indices) != 0:
+          if i not in self.indexes :
               # write in_memory inverted index ke disk
-              index_i = self.in_memory_indices
-              self.indexes.add(int(i))
-
               # write index_i ke disk
-              index_writer = InvertedIndex(curr_index_name, directory=self.output_dir).open_writer()
-              self.write_indices_to_disk(index_i, index_writer)
-              index_writer.exit()
+              if len(self.in_memory_indices) != 0:
+                index_i = self.in_memory_indices
+                self.indexes.add(int(i))
+                index_writer = InvertedIndex(curr_index_name, directory=self.output_dir).open_writer()
+                self.write_indices_to_disk(index_i, index_writer)
+                index_writer.exit()
               break
             
   def lMergeAddToken(self, doc, title):
