@@ -22,6 +22,7 @@ with app.app_context():
     for (_, _, filenames) in os.walk("./output_dir"):
          if len(filenames) == 0:
              BSBI_instance.index()
+    BSBI_instance.build_idf()
 
 
 

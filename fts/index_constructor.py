@@ -88,7 +88,7 @@ class DynamicBSBIIndexer:
                 with InvertedIndex(index_file, self.output_dir) as curr_idx:
                     for docID, termCount in curr_idx.doc_term_count_dict.items():
                         self.docWordCount[docID] = termCount
-    self.build_idf()
+    
     print("initializing: selesai")
 
 
