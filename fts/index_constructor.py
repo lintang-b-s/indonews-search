@@ -6,12 +6,10 @@ from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 import nltk
 from fts.mapper import IdMap
 from fts.parser import *
-import math 
 from fts.index import *
 import sys
-import concurrent.futures
-import multiprocessing as mp
-import threading
+import re
+
 
 
 nltk.download('popular')
@@ -59,7 +57,7 @@ class DynamicBSBIIndexer:
   max_dynamic_posting_list_size: int
     ukuran maksimal jumlah posting list  di in_memory_indices
   """
-  def __init__(self, file_path, output_dir, index_name = "BSBI_Lintang_main",
+  def __init__(self, file_path, output_dir, index_name = "BSBI_Lintang_main", inverted_index_buffer_size = 1e8
                  ):
     self.term_id_map = IdMap()
     self.doc_id_map = IdMap()
@@ -71,16 +69,40 @@ class DynamicBSBIIndexer:
     self.docWordCount =  {}
     self.in_memory_indices = {}
     self.indexes = set()
-    self.max_dynamic_posting_list_size = 1e8   # 1e8 postings di in_memory_indices
-    self.intermediate_indices_lock = threading.Lock()
+    self.max_dynamic_posting_list_size =  inverted_index_buffer_size #1e8   # 1e8 postings di in_memory_indices . 1e8 * 32 bit (int) = 400mb max size in-memory inverted index, sebelum diwrite ke disk
+    self.initialization()
+
+  def initialization(self):
+    dynamic_index_filename = "DynamicBSBI_Lintang_"
+    print("initializing: meload data dari database file...")
+    for (_, _, filenames) in os.walk("./output_dir"):
+        if len(filenames) != 0:
+                self.load()
+        for filename in filenames:
+            
+            if dynamic_index_filename in filename and filename.endswith('.dict'):
+                i = re.findall(r'\d+', filename)
+                i = i[0]
+                self.indexes.add(i)
+                index_file = "DynamicBSBI_Lintang_" + str(i)
+                with InvertedIndex(index_file, self.output_dir) as curr_idx:
+                    for docID, termCount in curr_idx.doc_term_count_dict.items():
+                        self.docWordCount[docID] = termCount
+    self.build_idf()
+    print("initializing: selesai")
+
 
   def save(self):
       """menyimpan doc_id_map dan term_id_map ke output directory"""
+
 
       with open(os.path.join(self.output_dir, 'terms.dict'), 'wb') as f:
           pkl.dump(self.term_id_map, f)
       with open(os.path.join(self.output_dir, 'docs.dict'), 'wb') as f:
           pkl.dump(self.doc_id_map, f)
+      with open(os.path.join(self.output_dir, 'doc_word_count.dict'), 'wb') as f:
+          pkl.dump(self.docWordCount, f)
+    
 
   def load(self):
       """Load doc_id_map and term_id_map dari output directory"""
@@ -89,6 +111,8 @@ class DynamicBSBIIndexer:
           self.term_id_map = pkl.load(f)
       with open(os.path.join(self.output_dir, 'docs.dict'), 'rb') as f:
           self.doc_id_map = pkl.load(f)
+      with open(os.path.join(self.output_dir, 'doc_word_count.dict'), 'rb') as f:
+          self.docWordCount = pkl.load(f)
 
   def merge_index(self, Z, curr_index):
       """
@@ -99,7 +123,8 @@ class DynamicBSBIIndexer:
       for token, postings_list in heapq.merge(curr_index):
          # https://eecs485staff.github.io/p4-mapreduce/heapq.html
          if token in Z:
-             Z[token].append(postings_list)
+             for new_postings_list in postings_list:
+                Z[token].append(new_postings_list)
              Z[token] = sorted(Z[token])
          else:
              Z[token] = postings_list
@@ -116,13 +141,13 @@ class DynamicBSBIIndexer:
       doc = stemmer.stem(doc) # stemming
       words = nltk.word_tokenize(doc) # tokenisasi
       self.docWordCount[doc_id] = len(words) # simpan word count dokumen untuk hitung tf
-        
+      
       for word in words:
         word = word.lower()  # mengubah kata ke lowercase
         if word not in stop_words: # stopword removal
             term_id = self.term_id_map[word]
             term_doc_pairs.append([term_id, doc_id])
-
+      
       term_doc_dict =  defaultdict(list)
       for t,d in term_doc_pairs:
         term_doc_dict[t].append(d)
@@ -134,6 +159,7 @@ class DynamicBSBIIndexer:
         self.update_idf(t, len(sorted_posting_list))
 
         if t in self.in_memory_indices:
+
             self.in_memory_indices[t].append(sorted_posting_list)
             self.in_memory_indices[t] = sorted(self.in_memory_indices[t])
         else:
@@ -141,6 +167,8 @@ class DynamicBSBIIndexer:
       in_memory_indices_size = 0
       for token in self.in_memory_indices:
           in_memory_indices_size += len(self.in_memory_indices[token])
+
+     
       return in_memory_indices_size    
 
 
@@ -151,9 +179,21 @@ class DynamicBSBIIndexer:
         index_writer: InvertedIndex
           untuk menulis ke inverted index file
         """
+        doc_term_counter = dict()
         for token in sorted(indices.keys()):
           sorted_postings_list = indices[token]
           index_writer.append(token, sorted_postings_list)
+          for doc_id in sorted_postings_list:
+              if doc_id not in doc_term_counter:
+                doc_term_counter[doc_id] = 1
+              else:
+                doc_term_counter[doc_id] += 1
+        for docID, termCount in doc_term_counter.items():
+            index_writer.add_doc_term_count(docID, termCount)
+
+        self.save() #write term_id_map & doc_id_map yang mengandung term di new indexed docs
+
+        
             
   def lMergeAddToken(self, doc, title):
       """
@@ -174,7 +214,7 @@ class DynamicBSBIIndexer:
         index_i = None
         Zi = self.in_memory_indices
         for i in range(0, sys.maxsize ):
-          curr_index_name = "BSBI_Lintang_" + i
+          curr_index_name = "DynamicBSBI_Lintang_" + str(i)
           if i in self.indexes:
               
               index_i  = InvertedIndexIterator(curr_index_name,
@@ -182,16 +222,16 @@ class DynamicBSBIIndexer:
               
               Zi = self.merge_index(Zi, index_i) # merge inverted index index_i dengan inverted index Zi
 
-              self.indexes.remove(i)
+              self.indexes.remove(int(i))
 
               index_i.exit_and_remove()
           else:
               index_i = Zi
-              self.indexes.add(i)
+              self.indexes.add(int(i))
 
               # write index_i ke disk
               index_writer = InvertedIndex(curr_index_name, directory=self.output_dir).open_writer()
-              self.write_indices_to_disk(index_i)
+              self.write_indices_to_disk(index_i, index_writer)
               index_writer.exit()
               break
         self.in_memory_indices = {}
@@ -216,7 +256,7 @@ class DynamicBSBIIndexer:
 
      self.intermediate_indices.append(index_id)
      index.exit()
-     print("berhasil memproses index ke-", i)
+     print("berhasil mengideks batch data ke-", i)
 
   def index(self):
       """
@@ -224,18 +264,12 @@ class DynamicBSBIIndexer:
         https://nlp.stanford.edu/IR-book/html/htmledition/blocked-sort-based-indexing-1.html
       """
 
-      
       start = time.time()
-      pool_size = 4
-      pool = mp.Pool(pool_size)
 
       
       chunksize =  1434
       file_name = self.file_path.split("/")[-1]
       i = 0
-    
- 
-
       # read chunk of csv dengan setiap chunk berukuran 1434
   
       for block in pd.read_csv(self.file_path, chunksize=chunksize):
@@ -374,7 +408,7 @@ class DynamicBSBIIndexer:
             
             metadata_file_path = os.path.join("output_dir", "BSBI_Lintang_main"+'.dict')
             with open(metadata_file_path, 'rb') as f:
-                postings_dict, terms = pkl.load(f)
+                postings_dict, terms, doc_term_count_dict = pkl.load(f)
 
             index_file_path = os.path.join("output_dir", "BSBI_Lintang_main"+'.index')
             index_file = open(index_file_path, 'rb+')
@@ -384,7 +418,7 @@ class DynamicBSBIIndexer:
             for t_id, (start_position, _, length_in_bytes) in postings_dict.items():
                 index_file.seek(start_position)
                 postings_list = decode_postings_list(index_file.read(length_in_bytes))
-                # idf = math.log10(self.total_doc_num) - math.log10(df+1)
+                # idf = np.log10(self.total_doc_num) - np.log10(df+1)
                 # self.idf[t_id] = idf
                 self.df[t_id] = len(set(postings_list))
             index_file.close()
@@ -398,18 +432,18 @@ class DynamicBSBIIndexer:
             
             # menghitung df untuk setiap term di setiap inverted index (yang didalam disk) di self.indexes
             for inverted_index in self.indexes:
-                with InvertedIndex("BSBI_Lintang_"+inverted_index, directory=self.output_dir
+                with InvertedIndex("DynamicBSBI_Lintang_"+str(inverted_index), directory=self.output_dir
                     ) as curr_index:
-                    for t_id, (start_position, _, length_in_bytes) in curr_index.postings_dict.items():
-                        index_file.seek(start_position)
-                        postings_list = decode_postings_list(index_file.read(length_in_bytes))
-                        if t_id not in self.df:
-                            self.df[t_id] =  len(set(postings_list))
-                        else:
-                            self.df[t_id] +=  len(set(postings_list))
+                        for t_id, (start_position, _, length_in_bytes) in curr_index.postings_dict.items():
+                            curr_index.index_file.seek(start_position)
+                            postings_list = decode_postings_list(curr_index.index_file.read(length_in_bytes))
+                            if t_id not in self.df:
+                                self.df[t_id] =  len(set(postings_list))
+                            else:
+                                self.df[t_id] +=  len(set(postings_list))
 
             for term_id, freq in self.df.items():
-                idf = math.log10(self.total_doc_num) - math.log10(freq+1)
+                idf = np.log10(self.total_doc_num) - np.log10(freq)
                 self.idf[term_id] = idf
             
             
@@ -422,11 +456,11 @@ class DynamicBSBIIndexer:
         self.df[token_id] = new_len_postings_list
       else:
         self.df[token_id] += new_len_postings_list
-      self.idf[token_id] = math.log10(self.total_doc_num) - math.log10(self.df[token_id]+1)
+      self.idf[token_id] = np.log10(self.total_doc_num) - np.log10(self.df[token_id]+1)
       
 
   def get_idf(self, term):
-        smother =  math.log10(self.total_doc_num) - math.log10(1)
+        smother =  np.log10(self.total_doc_num) - np.log10(1)
         return self.idf.get(term, smother)
 
  
@@ -476,24 +510,24 @@ class DynamicBSBIIndexer:
 
             # menghitung tf untuk setiap on-disk inverted index di self.indices
             for inverted_index in self.indexes:
-                with InvertedIndex("BSBI_Lintang_"+inverted_index, directory=self.output_dir
+                with InvertedIndex("DynamicBSBI_Lintang_"+str(inverted_index), directory=self.output_dir
                     ) as curr_index:
-                    for term in terms:
-                        term_id = self.term_id_map.str_to_id.get(term.lower())
-                        postings_list = []
-                        if term_id in postings_list:
-                            postings_list = curr_index[term_id]
+                        for term in terms:
+                            term_id = self.term_id_map.str_to_id.get(term.lower())
+                            postings_list = []
+                            if term_id in curr_index.postings_dict:
+                                postings_list = curr_index[term_id]
 
-                        for docID in postings_list:
-                            if docID not in tf_per_term[term_id]:
-                                tf_per_term[term_id][docID] =  1 / self.docWordCount[docID]
-                            else:
-                                tf_per_term[term_id][docID] += 1 / self.docWordCount[docID]
+                            for docID in postings_list:
+                                if docID not in tf_per_term[term_id]:
+                                    tf_per_term[term_id][docID] =  1 / self.docWordCount[docID]
+                                else:
+                                    tf_per_term[term_id][docID] += 1 / self.docWordCount[docID]
 
              
             for term_id, docIDs in tf_per_term.items():
                 for docID in docIDs.keys():
-                    w_t_d[docID, term_id] =  (1 + math.log10(tf_per_term[term_id][docID])) *  self.idf[term_id]
+                    w_t_d[docID, term_id] =  (np.log10(tf_per_term[term_id][docID] +1)) *  self.idf[term_id]
         
             documentScores = {}
             

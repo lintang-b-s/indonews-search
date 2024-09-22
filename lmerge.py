@@ -5,6 +5,8 @@ algoritma buat dynamic indexing
 https://nlp.stanford.edu/IR-book/html/htmledition/dynamic-indexing-1.html
 
 """
+import os 
+import re 
 
 def lMergeAddToken(indexes, z0, token):
     
@@ -39,3 +41,4 @@ def logarithmicMerge():
 
 if __name__ == "__main__":
     logarithmicMerge()
+    

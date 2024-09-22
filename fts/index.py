@@ -42,6 +42,7 @@ class InvertedIndex:
       self.directory = directory
 
       self.postings_dict = {}
+      self.doc_term_count_dict = {} # docID: count term di inverted index ini
       self.terms = []
 
     def open_writer(self):
@@ -54,7 +55,7 @@ class InvertedIndex:
 
         # load posting list dan terms dari file metadata
         with open(self.metadata_file_path, 'rb') as f:
-            self.postings_dict, self.terms = pkl.load(f)
+            self.postings_dict, self.terms, self.doc_term_count_dict = pkl.load(f)
             self.term_iter = self.terms.__iter__()
 
         return self
@@ -66,13 +67,13 @@ class InvertedIndex:
         self.index_file.close()
 
         with open(self.metadata_file_path, 'wb') as f:
-            pkl.dump([self.postings_dict, self.terms], f)
+            pkl.dump([self.postings_dict, self.terms, self.doc_term_count_dict], f)
             
     def exit(self):
         self.index_file.close()
 
         with open(self.metadata_file_path, 'wb') as f:
-            pkl.dump([self.postings_dict, self.terms], f)
+            pkl.dump([self.postings_dict, self.terms, self.doc_term_count_dict], f)
         
 
     def __getitem__(self, key):
@@ -93,6 +94,9 @@ class InvertedIndex:
             return decode_postings_list(self.index_file.read(length_in_bytes))
         except KeyError:
             return []
+
+    def add_doc_term_count(self, docID, term_count):
+        self.doc_term_count_dict[docID] = term_count
 
     def append(self, term, postings_list):
         """

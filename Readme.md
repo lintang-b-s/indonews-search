@@ -1,11 +1,12 @@
 # Indonews-fts
-full text search database (on-disk) for indonesian news (or can be anything) from scratch. all documents in the corpus are inverted indexed (with on-disk postings list). currently the query only supports tf-idf scoring. By default the application indexing the following dataset: https://drive.google.com/file/d/1-AbtUsBbMQJ6qe_cDhjy4_S7D18Cw7ZX/view?usp=sharing
+full text search database (on-disk) for indonesian news (or can be anything) from scratch. all documents in the corpus are inverted indexed (with on-disk postings list). Document indexing is done using dynamic indexing, so that new documents can be indexed into the database. currently the query only supports tf-idf scoring. By default the application indexing the following dataset: https://drive.google.com/file/d/1-AbtUsBbMQJ6qe_cDhjy4_S7D18Cw7ZX/view?usp=sharing
 
 
 # Quick Start
 ### Run the app
 ```
 - python -m venv venv
+- source ./venv/bin/activate
 - pip install -r requirements.txt
 - flask --app app run
 ```
@@ -39,9 +40,30 @@ curl --location --request GET 'http://localhost:5000/' \
 ```
 
 
+- indexing news doc by its "content"
+```
+curl --location 'http://localhost:5000/index' \
+--header 'Content-Type: application/json' \
+--data '{
+    "title": "10 Hal Seru yang Dilakukan IShowSpeed di Yogyakarta, Jadi Mas-mas Jawa hingga Cicipi Beras Kencur",
+    "content": "Ada banyak hal seru yang dilakukan IShowSpeed saat berkunjung ke Yogyakarta, Jawa Tengah pada Sabtu, 21 September 2024. Perjalanannya ini terekam dalam kanal YouTube pribadinya, IShowSpeed. IShowSpeed menikmati berbagai pengalaman khas lokal yang penuh keakraban dengan budaya Jawa dan kearifan Yogyakarta . Dengan gayanya yang khas, Youtuber asal Amerika ini pun berhasil mencuri perhatian netizen Indonesia. Bahkan, videonya saat berada di Yogyakarta sudah ditonton lebih dari 7,5 juta kali. Pria yang dipanggil El Kecepatan ini sebelumnya lebih dahulu mengunjungi Malaysia, kemudian menyambangi Jakarta, serta Bali dengan ditemani Reza Arap. Berikut adalah sederet keseruan IShowSpeed saat berkunjung ke Yogyakarta dikutip dari akun YouTube pribadinya, Minggu (22/9/2024). Saat sampai di Teras Malioboro, Speed langsung disambut oleh tiga orang yang berdandan ala tukang jamu gendong. Mereka kemudian memakaikan sang Youtuber baju batik dan blangkon, hingga menawarkannya untuk mencoba salah satu oleh-oleh khas Yogyakarta, yakni bakpia. Setelah dibuat kebingungan saat memakai batik dan menjajal bakpia, Speed lalu berjalan menghampiri sejumlah pemain gendang yang tampak kompak mengenakan batik. Ia mencoba ikut bermain gendang bersama mereka. Menariknya, di tengah-tengah aksinya itu, ia berkata, Kita harus memulai membuat band Indonesia"
+
+}'
+```
+
+- querying new indexed news doc
+```
+curl --location --request GET 'http://localhost:5000/' \
+--header 'Content-Type: application/json' \
+--data '{
+    "query": "Ishowspeed di Yogyakarta memakai batik"
+}'
+```
+
 # Ref
 ```
 - https://web.stanford.edu/class/cs276/19handouts/lecture2-intro-boolean-6per.pdf
 - https://nlp.stanford.edu/IR-book/pdf/04const.pdf
 - https://nlp.stanford.edu/IR-book/pdf/06vect.pdf
+- https://web.stanford.edu/class/cs276/19handouts/lecture6-tfidf-6per.pdf
 ```
