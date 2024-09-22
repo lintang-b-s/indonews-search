@@ -72,6 +72,9 @@ class DynamicBSBIIndexer:
     self.max_dynamic_posting_list_size =  inverted_index_buffer_size #1e8   # 1e8 postings di in_memory_indices . 1e8 * 32 bit (int) = 400mb max size in-memory inverted index, sebelum diwrite ke disk
     self.initialization()
 
+  
+      
+
   def initialization(self):
     dynamic_index_filename = "DynamicBSBI_Lintang_"
     print("initializing: meload data dari database file...")
@@ -129,6 +132,8 @@ class DynamicBSBIIndexer:
          else:
              Z[token] = postings_list
       return Z
+  
+  
 
   def index_doc_to_inmemory_indices(self, doc: str, title: str):
       """
@@ -171,6 +176,8 @@ class DynamicBSBIIndexer:
      
       return in_memory_indices_size    
 
+  
+      
 
   def write_indices_to_disk(self, indices, index_writer):
         """
@@ -194,6 +201,20 @@ class DynamicBSBIIndexer:
         self.save() #write term_id_map & doc_id_map yang mengandung term di new indexed docs
 
         
+  def close(self):
+      print(f"closing database... and writing in-memory inverted indexes to disk")
+      for i in range(0, sys.maxsize ):
+          curr_index_name = "DynamicBSBI_Lintang_" + str(i)
+          if i not in self.indexes:
+              # write in_memory inverted index ke disk
+              index_i = self.in_memory_indices
+              self.indexes.add(int(i))
+
+              # write index_i ke disk
+              index_writer = InvertedIndex(curr_index_name, directory=self.output_dir).open_writer()
+              self.write_indices_to_disk(index_i, index_writer)
+              index_writer.exit()
+              break
             
   def lMergeAddToken(self, doc, title):
       """

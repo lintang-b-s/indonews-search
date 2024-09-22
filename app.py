@@ -1,5 +1,7 @@
 import os
 import  urllib
+import signal
+import atexit
 if os.path.exists("./News.csv") == False:
         print("mendownload file News.csv....")
         url = "https://drive.google.com/uc?export=download&id=1-AbtUsBbMQJ6qe_cDhjy4_S7D18Cw7ZX"
@@ -53,6 +55,21 @@ def index_doc():
                 })
 
 
+def on_shutdown():
+    BSBI_instance.close() # save auxilary in-memory inverted index (dynamic indexing) ke disk
+
+
+atexit.register(on_shutdown)
+
+
 if __name__ == '__main__':  
     app.run(use_reloader=False)
+    def handle_signal(signum, frame):
+        print(f"Received signal {signum}, stopping server...")
+        on_shutdown()
+        exit(0)
+
+    signal.signal(signal.SIGINT, handle_signal)  # Handle Ctrl+C
+    signal.signal(signal.SIGTERM, handle_signal) # Handle termination signal
+
 
