@@ -86,7 +86,7 @@ class DynamicBSBIIndexer:
             if dynamic_index_filename in filename and filename.endswith('.dict'):
                 i = re.findall(r'\d+', filename)
                 i = i[0]
-                self.indexes.add(i)
+                self.indexes.add(int(i))
                 index_file = "DynamicBSBI_Lintang_" + str(i)
                 with InvertedIndex(index_file, self.output_dir) as curr_idx:
                     for docID, termCount in curr_idx.doc_term_count_dict.items():
@@ -202,7 +202,7 @@ class DynamicBSBIIndexer:
 
         
   def close(self):
-      print(f"closing database... and writing in-memory inverted indexes to disk")
+      print("closing database... and writing in-memory inverted indexes to disk")
       for i in range(0, sys.maxsize ):
           curr_index_name = "DynamicBSBI_Lintang_" + str(i)
           if i not in self.indexes:
