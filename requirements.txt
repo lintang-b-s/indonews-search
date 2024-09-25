@@ -4,3 +4,4 @@ PySastrawi==1.2.0
 pandas 
 flask
 flask_script
+vbcode

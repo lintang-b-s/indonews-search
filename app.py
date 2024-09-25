@@ -45,7 +45,7 @@ def query():
                     'msg': 'Success'
                 })
 
-@app.route("/index", methods=['POST'])
+@app.route("/index", methods=['POST', 'DELETE', 'PUT'])
 def index_doc():
      if request.method == 'POST':
           req_data = request.get_json()
@@ -56,6 +56,25 @@ def index_doc():
                     'status': '200',
                     'msg': 'Success indexing this news'
                 })
+     elif request.method == 'DELETE':
+        req_data = request.get_json()
+        doc_id = req_data['doc_id']
+        SIPMI_BSBI_instance.delete_doc(doc_id)
+        return jsonify({
+                    'status': '200',
+                    'msg': 'Success deleting the doc'
+                })
+     elif request.method == 'PUT':
+        req_data = request.get_json()
+        doc_id = req_data['doc_id']
+        title = req_data['title']
+        content = req_data['content']
+        SIPMI_BSBI_instance.update_doc(doc_id, title, content)
+        return jsonify({
+                    'status': '200',
+                    'msg': 'Success updating the doc'
+                })
+    
 
 
 def on_shutdown():

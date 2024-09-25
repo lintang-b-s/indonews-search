@@ -58,6 +58,11 @@ class DynamicSIPMI_BSBIIndexer:
     list of inverted index file selain SIPMI_BSBI_Lintang_main (di dalam disk)
   max_dynamic_posting_list_size: int
     ukuran maksimal jumlah posting list  di in_memory_indices
+  invalidation_bit_vector: [int]
+    buat nandain docID yang udah di delete dari inverted idnex. index dari array == docID yang sudah didelete dari inverted index.
+    ref: "Deletions are stored in an invalidation bit vector. We can then filter out deleted documents before returning the search result. Documents are updated by deleting and reinserting them."
+    from: https://nlp.stanford.edu/IR-book/html/htmledition/dynamic-indexing-1.html
+
   """
   def __init__(self, file_path, output_dir, index_name = "SIPMI_BSBI_Lintang_main", inverted_index_buffer_size = 1e8
                  ):
@@ -71,8 +76,10 @@ class DynamicSIPMI_BSBIIndexer:
     self.docWordCount =  {}
     self.in_memory_indices = {}
     self.indexes = set()
+    
     self.max_dynamic_posting_list_size =  inverted_index_buffer_size #1e8   # 1e8 postings di in_memory_indices . 1e8 * 32 bit (int) = 400mb max size in-memory inverted index, sebelum diwrite ke disk
     self.initialization()
+
 
   
       
@@ -83,6 +90,8 @@ class DynamicSIPMI_BSBIIndexer:
     for (_, _, filenames) in os.walk("./output_dir"):
         if len(filenames) != 0:
                 self.load()
+        else:
+            self.invalidation_bit_vector = []
         for filename in filenames:
             
             if dynamic_index_filename in filename and filename.endswith('.dict'):
@@ -106,7 +115,7 @@ class DynamicSIPMI_BSBIIndexer:
       with open(os.path.join(self.output_dir, 'docs.dict'), 'wb') as f:
           pkl.dump(self.doc_id_map, f)
       with open(os.path.join(self.output_dir, 'doc_word_count.dict'), 'wb') as f:
-          pkl.dump(self.docWordCount, f)
+          pkl.dump((self.docWordCount, self.invalidation_bit_vector ), f)
     
 
   def load(self):
@@ -117,7 +126,7 @@ class DynamicSIPMI_BSBIIndexer:
       with open(os.path.join(self.output_dir, 'docs.dict'), 'rb') as f:
           self.doc_id_map = pkl.load(f)
       with open(os.path.join(self.output_dir, 'doc_word_count.dict'), 'rb') as f:
-          self.docWordCount = pkl.load(f)
+          self.docWordCount, self.invalidation_bit_vector = pkl.load(f)
 
   def merge_index(self, Z, curr_index):
       """
@@ -233,21 +242,27 @@ class DynamicSIPMI_BSBIIndexer:
                 
                 index_writer.exit()
               break
+      self.save()
             
   def lMergeAddToken(self, doc, title):
       """
       algoritma buat dynamic indexing.
       https://nlp.stanford.edu/IR-book/html/htmledition/dynamic-indexing-1.html
       dipanggil setiap kali dokumen baru di index ke database.
+
+      save new indexed doc di in-memory index, baru setelah size in-memory index > 400mb save ke disk & clear in-memory index
+      ref: "If there is a requirement that new documents be included quickly, one solution is to maintain two indexes: a large main index and a small auxiliary index that stores new documents. The auxiliary index is kept in memory. Searches are run across both indexes and results merged."
+      from: https://nlp.stanford.edu/IR-book/html/htmledition/dynamic-indexing-1.html
       
       in_memory_indices:  dict{term: postings_list}
       doc: str
-        document baru yang ingin diindex
+        content document baru yang ingin diindex
 
       title: str
         title dari dokument yang ingin diindex
       """
       in_memory_indices_size = self.index_doc_to_inmemory_indices( doc, title)
+      self.invalidation_bit_vector.append(self.doc_id_map[title])
       self.total_doc_num += 1
       if in_memory_indices_size >= self.max_dynamic_posting_list_size:
         index_i = None
@@ -386,6 +401,7 @@ class DynamicSIPMI_BSBIIndexer:
 
 
   def sipmi_index(self):
+      print("indexing document di dalam corpus (News.csv)....")
       start = time.time()
       df =  pd.read_csv(self.file_path)
       self.sipmi_invert(df)
@@ -411,10 +427,35 @@ class DynamicSIPMI_BSBIIndexer:
       merged_index.exit()
 
       end = time.time()
+
       print(f"total waktu yang dibutuhkan untuk indexing seluruh dokumen: {(end-start)*10**3:.03f}ms")
+      self.invalidation_bit_vector = [False] * len(self.docWordCount)
+
 
       
-    
+  def delete_doc(self, doc_id):
+      """
+      delete document dg doc_id dari inverted index
+      ref: "Deletions are stored in an invalidation bit vector"
+      https://nlp.stanford.edu/IR-book/html/htmledition/dynamic-indexing-1.html
+      """
+      temp_title = self.doc_id_map[doc_id]
+      if temp_title == '':
+          return 
+      del self.doc_id_map[temp_title] 
+      self.doc_id_map[doc_id] = ''
+
+      self.invalidation_bit_vector[doc_id] = True
+
+
+  def update_doc(self, doc_id, title, content):
+      """
+      update document dg doc_id di inverted index
+      ref: " Documents are updated by deleting and reinserting them."
+      https://nlp.stanford.edu/IR-book/html/htmledition/dynamic-indexing-1.html
+      """
+      self.delete_doc(doc_id)
+      self.lMergeAddToken(content, title)
 
   def index(self):
       """
@@ -456,7 +497,9 @@ class DynamicSIPMI_BSBIIndexer:
       merged_index.exit()
 
       end = time.time()
+
       print(f"total waktu yang dibutuhkan untuk indexing seluruh dokumen: {(end-start)*10**3:.03f}ms")
+      self.invalidation_bit_vector = [False] * len(self.docWordCount)
 
 
   def merge(self, indices, merged_index):
@@ -557,6 +600,7 @@ class DynamicSIPMI_BSBIIndexer:
         ref: https://web.stanford.edu/class/cs276/19handouts/lecture6-tfidf-6per.pdf
 
         """
+        print("building idf dictionry....")
         try:
             with open("./output_dir/docs.dict", 'rb') as f:
                 docs = pkl.load(f)
@@ -603,7 +647,7 @@ class DynamicSIPMI_BSBIIndexer:
                 idf = np.log10(self.total_doc_num) - np.log10(freq)
                 self.idf[term_id] = idf
             
-            
+            print("building idf dictionary selesai....")
                 
         except FileNotFoundError:
             print("index file not found!")
@@ -626,6 +670,14 @@ class DynamicSIPMI_BSBIIndexer:
         """
         membuat tf-idf scoring untuk setiap document dari query
         ref: https://web.stanford.edu/class/cs276/19handouts/lecture6-tfidf-6per.pdf
+        
+        compute tf idf untuk dynamic index & in memory index juga
+        ref: "If there is a requirement that new documents be included quickly, one solution is to maintain two indexes: a large main index and a small auxiliary index that stores new documents. The auxiliary index is kept in memory. Searches are run across both indexes and results merged."
+        from: https://nlp.stanford.edu/IR-book/html/htmledition/dynamic-indexing-1.html
+
+        document yang didelete difilter/dihapus dari query result ( iterate docID di setiap posting)
+        ref: " Deletions are stored in an invalidation bit vector. We can then filter out deleted documents before returning the search result. Documents are updated by deleting and reinserting them.". https://nlp.stanford.edu/IR-book/html/htmledition/dynamic-indexing-1.html
+
         """
         with InvertedIndex(self.index_name, directory=self.output_dir
                     ) as mapper:
@@ -644,9 +696,12 @@ class DynamicSIPMI_BSBIIndexer:
                 term_id = self.term_id_map.str_to_id.get(term.lower())
                 postings_list = mapper[term_id]
                 
-                 
+
                 # menghitung tf untuk main inverted index
                 for docID in postings_list:
+                    if self.invalidation_bit_vector[docID] == True:
+                        # document with docID deleted  
+                        continue
                     if docID not in tf_per_term[term_id]:
                         tf_per_term[term_id][docID] =  1 / self.docWordCount[docID]
                     else:
@@ -659,6 +714,9 @@ class DynamicSIPMI_BSBIIndexer:
 
                 # menghitung tf untuk in-memory inverted index
                 for docID in in_memory_posting_list:
+                    if  self.invalidation_bit_vector[docID] == True:
+                        # document with docID deleted 
+                        continue
                     # document di in memory inverted index sama document di main inverted index beda
                     if docID not in tf_per_term[term_id]:
                         tf_per_term[term_id][docID] = 1 / self.docWordCount[docID] 
@@ -676,6 +734,9 @@ class DynamicSIPMI_BSBIIndexer:
                                 postings_list = curr_index[term_id]
 
                             for docID in postings_list:
+                                if self.invalidation_bit_vector[docID] == True:
+                                    # document with docID deleted 
+                                    continue
                                 if docID not in tf_per_term[term_id]:
                                     tf_per_term[term_id][docID] =  1 / self.docWordCount[docID]
                                 else:
