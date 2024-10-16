@@ -2,15 +2,16 @@ import os
 import  urllib
 import signal
 import atexit
+from fts.index_constructor import DynamicSIPMI_BSBIIndexer
+from flask import Flask, request, jsonify
+
 if os.path.exists("./News.csv") == False:
         print("mendownload file News.csv....")
         url = "https://drive.google.com/uc?export=download&id=1-AbtUsBbMQJ6qe_cDhjy4_S7D18Cw7ZX"
         path = "News.csv"
         urllib.request.urlretrieve(url, path)
         print("selesai mendownload file News.csv")
-from fts.index_constructor import DynamicSIPMI_BSBIIndexer
 
-from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
@@ -26,7 +27,7 @@ with app.app_context():
             # choose one
             # SIPMI_BSBI_instance.index()
             SIPMI_BSBI_instance.sipmi_index() 
-    SIPMI_BSBI_instance.build_idf()
+    SIPMI_BSBI_instance.build_tf_idf()
 
 
 

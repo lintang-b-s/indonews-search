@@ -7,6 +7,7 @@ import nltk
 from fts.mapper import IdMap
 from fts.parser import *
 from fts.index import *
+import math 
 from collections import OrderedDict
 
 import sys
@@ -173,7 +174,7 @@ class DynamicSIPMI_BSBIIndexer:
 
         sorted_posting_list = sorted(unsorted_posting_list)
 
-        self.update_idf(t, len(sorted_posting_list))
+        self.update_tf_idf(t, sorted_posting_list)
 
         if t in self.in_memory_indices:
             for posting in sorted_posting_list:
@@ -263,6 +264,7 @@ class DynamicSIPMI_BSBIIndexer:
       """
       in_memory_indices_size = self.index_doc_to_inmemory_indices( doc, title)
       self.invalidation_bit_vector.append(self.doc_id_map[title])
+
       self.total_doc_num += 1
       if in_memory_indices_size >= self.max_dynamic_posting_list_size:
         index_i = None
@@ -594,18 +596,19 @@ class DynamicSIPMI_BSBIIndexer:
       
 
 
-  def build_idf(self ):
+  def build_tf_idf(self ):
         """
         membuat dictionary inverse document frequency
         ref: https://web.stanford.edu/class/cs276/19handouts/lecture6-tfidf-6per.pdf
 
         """
-        print("building idf dictionry....")
+        print("building tf-idf dictionry....")
         try:
             with open("./output_dir/docs.dict", 'rb') as f:
                 docs = pkl.load(f)
             self.total_doc_num = len(docs)
             self.idf = {}
+            self.tf = {}
             
             metadata_file_path = os.path.join("output_dir", "SIPMI_BSBI_Lintang_main"+'.dict')
             with open(metadata_file_path, 'rb') as f:
@@ -621,6 +624,15 @@ class DynamicSIPMI_BSBIIndexer:
                 postings_list = decode_postings_list(index_file.read(length_in_bytes))
                 # idf = np.log10(self.total_doc_num) - np.log10(df+1)
                 # self.idf[t_id] = idf
+
+                for doc_id in postings_list:
+                    if doc_id not in self.tf:
+                        self.tf[doc_id] = {}
+                    if t_id not in self.tf[doc_id]:
+                        self.tf[doc_id][t_id] = 1  / self.docWordCount[doc_id]
+                    else:
+                        self.tf[doc_id][t_id] += 1  / self.docWordCount[doc_id]
+
                 self.df[t_id] = len(set(postings_list))
             index_file.close()
 
@@ -642,6 +654,15 @@ class DynamicSIPMI_BSBIIndexer:
                                 self.df[t_id] =  len(set(postings_list))
                             else:
                                 self.df[t_id] +=  len(set(postings_list))
+                            
+                            for doc_id in postings_list:
+                                if doc_id not in self.tf:
+                                    self.tf[doc_id] = {}
+                                if t_id not in self.tf[doc_id]:
+                                    self.tf[doc_id][t_id] = 1  / self.docWordCount[doc_id]
+                                else:
+                                    self.tf[doc_id][t_id] += 1  / self.docWordCount[doc_id]
+
 
             for term_id, freq in self.df.items():
                 idf = np.log10(self.total_doc_num) - np.log10(freq)
@@ -652,12 +673,22 @@ class DynamicSIPMI_BSBIIndexer:
         except FileNotFoundError:
             print("index file not found!")
 
-  def update_idf(self, token_id, new_len_postings_list):
+  def update_tf_idf(self, token_id, new_posting_list):
+      new_len_postings_list = len(new_posting_list)
       if token_id not in self.df:
         self.df[token_id] = new_len_postings_list
       else:
         self.df[token_id] += new_len_postings_list
-      self.idf[token_id] = np.log10(self.total_doc_num) - np.log10(self.df[token_id]+1)
+
+      self.idf[token_id] = math.log10(self.total_doc_num) - math.log10(self.df[token_id]+1)
+
+      for doc_id in new_posting_list:
+        if doc_id not in self.tf:
+            self.tf[doc_id] = {}
+        if token_id not in self.tf[doc_id]:
+            self.tf[doc_id][token_id] = 1  / self.docWordCount[doc_id]
+        else:
+            self.tf[doc_id][token_id] += 1  / self.docWordCount[doc_id]
       
 
   def get_idf(self, term):
@@ -686,26 +717,26 @@ class DynamicSIPMI_BSBIIndexer:
             terms = nltk.word_tokenize(query)
             w_t_d = {}
 
+            doc_vector = {}
+            relevant_doc_ids = set()
+            word_count = {}
+
+
             sortedDocumentScores = {}
-            tf_per_term = {}
             for term in terms:
                 term_id = self.term_id_map.str_to_id.get(term.lower())
-                tf_per_term[term_id] = dict(dict())
+                word_count[term] = word_count.get(term, 0) + 1
 
             for term in terms:
                 term_id = self.term_id_map.str_to_id.get(term.lower())
                 postings_list = mapper[term_id]
-                
-
-                # menghitung tf untuk main inverted index
-                for docID in postings_list:
-                    if self.invalidation_bit_vector[docID] == True:
-                        # document with docID deleted  
+                doc_id_contain_term = set(postings_list)
+                for rel_doc_id in doc_id_contain_term:
+                    if  self.invalidation_bit_vector[rel_doc_id] == True:
+                        # document with docID deleted 
                         continue
-                    if docID not in tf_per_term[term_id]:
-                        tf_per_term[term_id][docID] =  1 / self.docWordCount[docID]
-                    else:
-                        tf_per_term[term_id][docID] += 1 / self.docWordCount[docID]
+                    relevant_doc_ids.add(rel_doc_id)
+                
 
 
                 in_memory_posting_list = []
@@ -717,46 +748,40 @@ class DynamicSIPMI_BSBIIndexer:
                     if  self.invalidation_bit_vector[docID] == True:
                         # document with docID deleted 
                         continue
-                    # document di in memory inverted index sama document di main inverted index beda
-                    if docID not in tf_per_term[term_id]:
-                        tf_per_term[term_id][docID] = 1 / self.docWordCount[docID] 
-                    else:
-                        tf_per_term[term_id][docID] += 1 / self.docWordCount[docID]
+
+                    relevant_doc_ids.add(docID)
 
             # menghitung tf untuk setiap on-disk inverted index di self.indices
             for inverted_index in self.indexes:
                 with InvertedIndex("DynamicSIPMI_BSBI_Lintang_"+str(inverted_index), directory=self.output_dir
                     ) as curr_index:
-                        for term in terms:
-                            term_id = self.term_id_map.str_to_id.get(term.lower())
-                            postings_list = []
-                            if term_id in curr_index.postings_dict:
-                                postings_list = curr_index[term_id]
 
-                            for docID in postings_list:
-                                if self.invalidation_bit_vector[docID] == True:
-                                    # document with docID deleted 
-                                    continue
-                                if docID not in tf_per_term[term_id]:
-                                    tf_per_term[term_id][docID] =  1 / self.docWordCount[docID]
-                                else:
-                                    tf_per_term[term_id][docID] += 1 / self.docWordCount[docID]
+                    for term in terms:
+                        term_id = self.term_id_map.str_to_id.get(term.lower())
+                        postings_list = []
+                        if term_id in curr_index.postings_dict:
+                            postings_list = curr_index[term_id]
+                        doc_id_contain_term = set(postings_list)
+                        for rel_doc_id in doc_id_contain_term:
+                            relevant_doc_ids.add(rel_doc_id)
 
-             
-            for term_id, docIDs in tf_per_term.items():
-                for docID in docIDs.keys():
-                    w_t_d[docID, term_id] =  (np.log10(tf_per_term[term_id][docID] +1)) *  self.idf[term_id]
-        
+                   
+
+            for rel_doc_id in relevant_doc_ids:
+                doc_vector[rel_doc_id] = {term_id: self.tf[rel_doc_id][term_id] * self.idf[term_id] for term_id in self.tf[rel_doc_id]}
+
+
+            tf_q = { self.term_id_map.str_to_id.get(word.lower()): count / len(terms) for word, count in word_count.items()}
+            query_vector = {}
+            for word in terms:
+                if word not in stop_words:
+                    query_vector[self.term_id_map.str_to_id.get(word.lower())] = tf_q[self.term_id_map.str_to_id.get(word.lower())] * self.idf[self.term_id_map.str_to_id.get(word.lower())] 
             documentScores = {}
-            
-            for (docID, term_id), tfidf  in w_t_d.items():
-                if docID not in documentScores:
-                    documentScores[docID] = tfidf
-                else:
-                    documentScores[docID] += tfidf
-        
-            sortedDocumentScores = dict(sorted(documentScores.items(), key=lambda item: item[1], reverse=True))
 
+            for docID, doc_vector_val in doc_vector.items():
+                documentScores[docID] = cosine_similarity(query_vector, doc_vector_val, docID)
+
+            sortedDocumentScores = dict(sorted(documentScores.items(), key=lambda item: item[1], reverse=True))
         sortedRes = {}
         for docID, v in sortedDocumentScores.items():
             if v != 0 and len(sortedRes) <= 10:
@@ -764,5 +789,18 @@ class DynamicSIPMI_BSBIIndexer:
         res = [(key, value) for key, value in sortedRes.items()]
         return res
   
+
+
+def cosine_similarity(query_vector, doc_vector, doc_id):
+    words = set(query_vector.keys()) & set(doc_vector.keys())
+    dot_product = sum([query_vector[term_id] * doc_vector[term_id] for term_id in words])
+
+    query_norm = math.sqrt(sum([value**2 for value in query_vector.values()]))
+
+    doc_norm = math.sqrt(sum([value**2 for value in doc_vector.values()]))
+
+    if query_norm != 0 and doc_norm != 0:
+        return dot_product / (query_norm * doc_norm)
+    return 0.0
   
   
