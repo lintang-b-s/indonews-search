@@ -1,0 +1,29 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-server-ingress
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+
+spec:
+  ingressClassName: nginx-service
+  rules:
+  - host: lintang.local
+    http:
+      paths:
+        - path: /fts
+          pathType: Prefix
+          backend:
+            service: 
+              name: indonews-fts-service
+              port: 
+                number: 5000
+
+              
+
+
+  # namespace: default
+  # annotations:
+  #   nginx.ingress.kubernetes.io/rewrite-target: /$1

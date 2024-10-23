@@ -31,7 +31,13 @@ with app.app_context():
 
 
 
-
+@app.route("/healthz", methods=['GET'])
+def healthz():
+    if request.method == 'GET':
+        return jsonify({
+            'status': 200,
+            'msg': 'Healthy'
+        })
 
 
 @app.route("/", methods=['GET'])
@@ -42,7 +48,7 @@ def query():
         results = SIPMI_BSBI_instance.compute_tf_idf(query=query)
         return jsonify({
                     'res': results,
-                    'status': '200',
+                    'status': 200,
                     'msg': 'Success'
                 })
 
@@ -54,7 +60,7 @@ def index_doc():
           content = req_data['content']
           SIPMI_BSBI_instance.lMergeAddToken(content, title)
           return jsonify({
-                    'status': '200',
+                    'status': 200,
                     'msg': 'Success indexing this news'
                 })
      elif request.method == 'DELETE':
@@ -62,7 +68,7 @@ def index_doc():
         doc_id = req_data['doc_id']
         SIPMI_BSBI_instance.delete_doc(doc_id)
         return jsonify({
-                    'status': '200',
+                    'status': 200,
                     'msg': 'Success deleting the doc'
                 })
      elif request.method == 'PUT':
@@ -72,7 +78,7 @@ def index_doc():
         content = req_data['content']
         SIPMI_BSBI_instance.update_doc(doc_id, title, content)
         return jsonify({
-                    'status': '200',
+                    'status': 200,
                     'msg': 'Success updating the doc'
                 })
     

@@ -1,0 +1,105 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: indonews-fts
+  namespace: default
+  labels:
+    app: indonews-fts
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: indonews-fts
+  template:
+    metadata:
+      labels:
+        app: indonews-fts
+    spec:
+      containers:
+      - name:  indonews-fts
+        image: docker.io/lintangbirdas/indonews-fts
+        imagePullPolicy: Always
+    
+        resources:
+          limits:
+            memory: "1000Mi"
+            cpu: "1000m"
+        ports:
+        - containerPort: 5000
+          name: rest-api
+          protocol: TCP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: indonews-fts-service
+  namespace: default
+spec:
+  selector: 
+    app: indonews-fts
+  type: ClusterIP
+  ports:
+    - name: tcp-port
+      port: 5000
+      targetPort: 5000
+      protocol: TCP
+      
+
+
+
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: indonews-fts-service
+# spec:
+#   type: NodePort
+#   selector: 
+#     app: indonews-fts
+#   ports:
+#     - name: rest-api
+#       port: 5000
+#       protocol: TCP
+#       # targetPort: 5000
+      
+   
+  
+
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: indonews-fts-service
+# spec:
+#   selector: 
+#     app: indonews-fts
+#   ports:
+#     - name: rest-api
+#       port: 5000
+#       protocol: TCP
+#       targetPort: 5000
+   
+
+
+# readinessProbe:
+        #   httpGet:
+        #     path: /healthz
+        #     port: 5000
+        #   initialDelaySeconds: 10
+        #   periodSeconds: 5
+        #   failureThreshold: 5
+        # livenessProbe:
+        #   httpGet:
+        #     path:  /healthz
+        #     port: 5000
+        #   initialDelaySeconds: 3
+        #   periodSeconds: 4
+        #   failureThreshold: 8
+        # startupProbe:
+        #   httpGet:
+        #     path: /healthz
+        #     port: 5000
+        #   failureThreshold: 10
+        #   periodSeconds: 10
