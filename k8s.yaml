@@ -3,9 +3,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: indonews-fts
-  namespace: default
-  labels:
-    app: indonews-fts
 spec:
   replicas: 1
   selector:
@@ -34,12 +31,12 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: indonews-fts-service
+  name: indonews-fts
   namespace: default
 spec:
   selector: 
     app: indonews-fts
-  type: ClusterIP
+  type: NodePort
   ports:
     - name: tcp-port
       port: 5000
